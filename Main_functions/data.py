@@ -13,6 +13,63 @@ from datasets import Dataset, load_dataset, load_metric
 tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 tokenizer_biobert_large = AutoTokenizer.from_pretrained('dmis-lab/biobert-large-cased-v1.1-squad')
 
+import urllib.request
+from bs4 import BeautifulSoup
+import re
+import pandas as pd
+
+
+def get_treatment_from_wiki(sym):
+    '''
+    sym: input, symptoms string 
+    output: treatment text
+    '''
+    url = 'https://en.wikipedia.org/wiki/' +  sym
+    response = urllib.request.urlopen(url)
+    html_doc = response.read().decode(encoding='UTF-8')
+    parsed = BeautifulSoup(html_doc, "html.parser")
+    
+    soup = parsed.find("span",{'class':'mw-headline', "id":"Treatment"})#First look at Treatment
+    if not soup:
+        soup = parsed.find("span",{'class':'mw-headline', "id":"Management"})#If there is no Treatment, use Management
+        if not soup:
+            soup = parsed.find("span",{'class':'mw-headline', "id":"Treatments"})
+            if not soup: 
+                treatment = ["NA"]
+                return treatment
+        
+    last_parent = list(soup.parents)[0]
+    close_siblings = list(last_parent.next_siblings)
+    
+    treatment = []
+    for i in range(len(close_siblings)):
+        if close_siblings[i].name == 'h2':  #do not include next chapter
+            break
+        if close_siblings[i].name == 'p':   #main body of Treatment/Management
+            ori_text = close_siblings[i].text
+            ori_text = re.sub(r"\xa0", "", ori_text)  #remove "\xa0"
+            ori_text = re.sub(r"\[\d*\]", "", ori_text) #remove cite
+            ori_text = re.sub(r"\n", "", ori_text) #remove "\n"
+            treatment.append(ori_text)
+        else:
+            continue
+            
+    return treatment
+
+
+Sym_Tre_dic = {}
+Symptoms = ['Fever', 'Cough', 'Shortness_of_breath',  'Myalgia', 'Headache', 'Anosmia', 
+            'Sore_throat', 'Nasal_congestion', 'Rhinorrhea', 'Nausea', 'Vomiting', 'Diarrhea',
+           'Abdominal_pain','Blood_in_stool','Chest_pain','Constipation','Dysphagia',
+           'Palpitations','Knee_pain','Low_back_pain','Neck_pain','Paresthesia','Rash','Hemoptysis',
+            'Pneumonia','Delayed_onset_muscle_soreness','Back_pain','Xerostomia','Dry_eye_syndrome',
+           'Insomnia','Sleep_deprivation','Cyanosis','Somnolence','Heartburn','Tremor','Chronic_pain'] 
+for s in Symptoms:
+    Sym_Tre_dic[s] = get_treatment_from_wiki(s)
+
+
+
+
 
 # ST_QuAAD dataset
 def padded_question(question_list, tokenizer):
